@@ -2,19 +2,39 @@
  * Helpers.
  */
 
-var s = 1000;
-var m = s * 60;
-var h = m * 60;
-var d = h * 24;
-var y = d * 365.25;
-var order = ['s','m','h','d','y'];
+var metrics = [
+  {names: ['ms'], scale: 1},
+  {names: ['s', 'seconds','second'], scale: 1000},
+  {names: ['min', 'minutes', 'minute', 'm'], scale: 60},
+  {names: ['h','hours','hour'], scale: 60},
+  {names: ['d','days','day'], scale: 24},
+  {names: ['y', 'years', 'year'], scale: 365.25}];
+
+for (var i = 0; i < metrics.length; i++) {
+  var time = 1;
+  for (var j = 0; j <= i; j++){
+    time *= metrics[i].scale;
+  }
+  metrics[i].time = time;
+  for (var j = 0; j < metrics[i].names.length; j++) {
+    metrics[metrics[i].names[j]] = metrics[i];
+  }
+  metrics[i].short = metrics[i].names[0];
+  metrics[i].long = metrics[i].names[1] || metrics[i].names[0];
+  metrics[i].singular = metrics[i].names[2] || metrics[i].names[0];
+}
+
+var pattern = '(\\d*\\.?\\d+)\\s*(' + metrics.map(function(metric){
+  return metric.names.join('|')}).join('|') + ')';
 
 /**
  * Parse or format the given `val`.
  *
- * Options:
+ * Options (passed to `format`):
  *
  *  - `long` verbose formatting [false]
+ *  - `largest` express in terms og the largest whole unit [false]
+ *    - set to `'round'` to round to the nearest whole number
  *
  * @param {String|Number} val
  * @param {Object} options
@@ -25,9 +45,7 @@ var order = ['s','m','h','d','y'];
 module.exports = function(val, options){
   options = options || {};
   if ('string' == typeof val) return parse(val);
-  return options.long
-    ? long(val)
-    : short(val);
+  else return format(val, options.long;
 };
 
 /**
@@ -42,70 +60,41 @@ function parse(str) {
   var segments = str.split(':');
   if(segments.length > 1) {
     str = segments.map(function(t,i) {
-      return t + (order[segments.length-i - 1] || ':')}).join('');
+      var position = metrics[segments.length-i];
+      return t + (position ? position.short : ':')}).join('');
   }
-  var match = /^((?:\d+)?\.?\d+) *(ms|seconds?|s|minutes?|m|hours?|h|days?|d|years?|y)?$/i.exec(str);
-  if (!match) return;
-  var n = parseFloat(match[1]);
-  var type = (match[2] || 'ms').toLowerCase();
-  switch (type) {
-    case 'years':
-    case 'year':
-    case 'y':
-      return n * y;
-    case 'days':
-    case 'day':
-    case 'd':
-      return n * d;
-    case 'hours':
-    case 'hour':
-    case 'h':
-      return n * h;
-    case 'minutes':
-    case 'minute':
-    case 'm':
-      return n * m;
-    case 'seconds':
-    case 'second':
-    case 's':
-      return n * s;
-    case 'ms':
-      return n;
+
+  var regex = new RegExp(pattern,'ig');
+  var milliseconds = 0;
+
+  while(var match = regex.exec()) {
+    milliseconds += parseFloat(match[1]) * metrics[match[2].toLowerCase()].time;
   }
+  return milliseconds;
 }
 
 /**
- * Short format for `ms`.
+ * Format milliseconds to strings.
  *
  * @param {Number} ms
+ * @param {Boolean} long
+ * @param largest
  * @return {String}
  * @api private
  */
 
-function short(ms) {
-  if (ms >= d) return Math.round(ms / d) + 'd';
-  if (ms >= h) return Math.round(ms / h) + 'h';
-  if (ms >= m) return Math.round(ms / m) + 'm';
-  if (ms >= s) return Math.round(ms / s) + 's';
-  return ms + 'ms';
+function format(ms, long, largest) {
+  var parts=[];
+  for (var i = metrics.length; i >= 0; i--) {
+    if (ms >= metrics[i].time) {
+      var final = largest == true || largest == 'round'
+        || metrics[largest] == metrics[i] || i == 0;
+      var subval = (largest == 'round'?
+        Math.round : Math.floor)(val / metrics[i].time)
+      parts[parts.length] = subval + (long ?
+        ' ' + (subval == 1 ? metrics[i].singular : metrics[i].long)
+        : metrics[i].short);
+    }
+  }
 }
 
-/**
- * Long format for `ms`.
- *
- * @param {Number} ms
- * @return {String}
- * @api private
- */
-
-function long(ms) {
-  if (ms == d) return Math.round(ms / d) + ' day';
-  if (ms > d) return Math.round(ms / d) + ' days';
-  if (ms == h) return Math.round(ms / h) + ' hour';
-  if (ms > h) return Math.round(ms / h) + ' hours';
-  if (ms == m) return Math.round(ms / m) + ' minute';
-  if (ms > m) return Math.round(ms / m) + ' minutes';
-  if (ms == s) return Math.round(ms / s) + ' second';
-  if (ms > s) return Math.round(ms / s) + ' seconds';
-  return ms + ' ms';
-}
